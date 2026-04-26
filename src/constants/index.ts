@@ -1,0 +1,4 @@
+export const DEFAULT_WINDOW_SIZE = 5000;
+export const DEFAULT_INTERVAL = 500;
+export const DEFAULT_INCREMENT = 10;
+export const DEFAULT_DOWNSAMPLING_THRESHOLD = 1000;
