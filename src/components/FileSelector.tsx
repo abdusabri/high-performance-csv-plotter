@@ -22,7 +22,10 @@ const FileSelector: React.FC<FileSelectorProps> = React.memo(
     );
 
     const handleTriggerFileSelect = useCallback(() => {
-      inputRef.current?.click();
+      if (inputRef.current) {
+        inputRef.current.value = '';
+        inputRef.current.click();
+      }
     }, []);
 
     return (
