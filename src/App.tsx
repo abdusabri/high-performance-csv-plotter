@@ -59,7 +59,7 @@ function App() {
     <div className="flex min-h-screen flex-col bg-background">
       <header className="border-b border-border bg-card py-4">
         <div className="container mx-auto px-4">
-          <h1 className="text-2xl font-bold text-foreground">
+          <h1 className="text-2xl font-semibold text-foreground">
             High-Performance CSV Plotter
           </h1>
         </div>

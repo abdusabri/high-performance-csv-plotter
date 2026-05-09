@@ -314,7 +314,7 @@ const PlotControls: React.FC<PlotControlsProps> = React.memo(
         </div>
         {showTooltip && totalPoints === 0 && (
           <div
-            className="pointer-events-none fixed z-50 rounded bg-black px-2 py-1 text-sm text-white"
+            className="pointer-events-none fixed z-50 rounded bg-zinc-950 px-2 py-1 text-sm text-white"
             style={{
               left: `${mousePosition.x + 10}px`,
               top: `${mousePosition.y + 10}px`,
