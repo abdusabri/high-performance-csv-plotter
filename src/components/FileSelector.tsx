@@ -1,4 +1,4 @@
-import React, { useCallback } from 'react';
+import React, { useCallback, useRef } from 'react';
 import { Button } from './ui/button';
 
 interface FileSelectorProps {
@@ -9,6 +9,8 @@ interface FileSelectorProps {
 
 const FileSelector: React.FC<FileSelectorProps> = React.memo(
   ({ onFileSelect, isLoading, progress }) => {
+    const inputRef = useRef<HTMLInputElement>(null);
+
     const handleFileChange = useCallback(
       (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
@@ -19,10 +21,15 @@ const FileSelector: React.FC<FileSelectorProps> = React.memo(
       [onFileSelect],
     );
 
+    const handleTriggerFileSelect = useCallback(() => {
+      inputRef.current?.click();
+    }, []);
+
     return (
       <div className="mb-4">
         <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:gap-4">
           <input
+            ref={inputRef}
             type="file"
             accept=".csv"
             onChange={handleFileChange}
@@ -30,16 +37,14 @@ const FileSelector: React.FC<FileSelectorProps> = React.memo(
             id="file-input"
             disabled={isLoading}
           />
-          <label htmlFor="file-input">
-            <Button
-              variant="outline"
-              disabled={isLoading}
-              asChild
-              className="cursor-pointer"
-            >
-              <span>Select CSV File</span>
-            </Button>
-          </label>
+          <Button
+            variant="outline"
+            disabled={isLoading}
+            type="button"
+            onClick={handleTriggerFileSelect}
+          >
+            Select CSV File
+          </Button>
           <a
             href="https://onedrive.live.com/?redeem=aHR0cHM6Ly8xZHJ2Lm1zL3UvYy8zNWYwYjA3ZTAxZmNhYmQxL0lRQjQxOUFKWm1fMlNvcUpycThSdlBiYkFmWno1V1EzcmxoQnhLN0JLQzM5TDZzP2U9cU54TGdy&cid=35F0B07E01FCABD1&id=35F0B07E01FCABD1%21s09d0d7786f664af68a89aeaf11bcf6db&parId=35F0B07E01FCABD1%21112&o=OneUp"
             target="_blank"

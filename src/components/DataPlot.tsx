@@ -93,10 +93,10 @@ const DataPlot: React.FC<DataPlotProps> = React.memo(({ data }) => {
   }, [containerWidth]);
 
   return (
-    <div className="h-[440px] rounded border bg-white p-2" ref={containerRef}>
+    <div className="h-[440px] rounded border border-border bg-card p-2" ref={containerRef}>
       {!data || data.length === 0 ? (
         <div className="flex h-full items-center justify-center">
-          <p className="text-center text-gray-500">
+          <p className="text-center text-muted-foreground">
             Select a CSV file to display the plot
           </p>
         </div>

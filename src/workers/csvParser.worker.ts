@@ -16,7 +16,13 @@ const BATCH_SIZE = 100000;
  * Parses the file incrementally to keep memory bounded while streaming
  * progress updates back to the main thread.
  */
-async function parseCSV(fileBuffer: ArrayBuffer) {
+function yieldToMainThread() {
+  return new Promise<void>((resolve) => {
+    setTimeout(resolve, 0);
+  });
+}
+
+function parseCSV(fileBuffer: ArrayBuffer) {
   let dataPoints: { x: number; y: number }[] = [];
   let buffer = '';
   let totalPoints = 0;
@@ -26,7 +32,93 @@ async function parseCSV(fileBuffer: ArrayBuffer) {
   // Reuse one decoder so streamed reads preserve chunk boundaries correctly.
   const decoder = new TextDecoder();
 
-  for (let offset = 0; offset < fileBuffer.byteLength; offset += CHUNK_SIZE) {
+  const processLineBatch = (
+    completeLines: string[],
+    startIndex = 0,
+  ): Promise<void> => {
+    for (let index = startIndex; index < completeLines.length; index++) {
+      const line = completeLines[index];
+      totalLines++;
+
+      if (!line.trim()) continue;
+
+      const [x, y] = line.split(',').map((v) => parseFloat(v.trim()));
+
+      if (!isNaN(x) && !isNaN(y)) {
+        dataPoints.push({ x, y });
+        totalPoints++;
+      }
+
+      if (dataPoints.length >= BATCH_SIZE) {
+        const pointsBatch = dataPoints.slice();
+
+        ctx.postMessage({
+          action: 'result',
+          points: pointsBatch,
+          count: pointsBatch.length,
+          currentTotal: totalPoints,
+        });
+
+        dataPoints = [];
+        reportProgress(
+          processedBytes,
+          fileBuffer.byteLength,
+          totalPoints,
+          totalLines,
+        );
+
+        return yieldToMainThread().then(() =>
+          processLineBatch(completeLines, index + 1),
+        );
+      }
+    }
+
+    return Promise.resolve();
+  };
+
+  const finishParsing = () => {
+    if (buffer.trim()) {
+      totalLines++;
+      const [x, y] = buffer
+        .trim()
+        .split(',')
+        .map((v) => parseFloat(v.trim()));
+      if (!isNaN(x) && !isNaN(y)) {
+        dataPoints.push({ x, y });
+        totalPoints++;
+      }
+    }
+
+    if (dataPoints.length > 0) {
+      ctx.postMessage({
+        action: 'result',
+        points: dataPoints.slice(),
+        count: dataPoints.length,
+        currentTotal: totalPoints,
+      });
+    }
+
+    ctx.postMessage({
+      action: 'complete',
+      totalPoints,
+      totalLines,
+      processedBytes: fileBuffer.byteLength,
+    });
+
+    reportProgress(
+      fileBuffer.byteLength,
+      fileBuffer.byteLength,
+      totalPoints,
+      totalLines,
+    );
+  };
+
+  const processChunk = (offset: number): Promise<void> => {
+    if (offset >= fileBuffer.byteLength) {
+      finishParsing();
+      return Promise.resolve();
+    }
+
     const chunkEnd = Math.min(offset + CHUNK_SIZE, fileBuffer.byteLength);
     const chunk = fileBuffer.slice(offset, chunkEnd);
 
@@ -41,40 +133,16 @@ async function parseCSV(fileBuffer: ArrayBuffer) {
       const completeLines = buffer.substring(0, lastNewlineIndex).split('\n');
       buffer = buffer.substring(lastNewlineIndex + 1);
 
-      for (const line of completeLines) {
-        totalLines++;
+      return processLineBatch(completeLines).then(() => {
+        reportProgress(
+          processedBytes,
+          fileBuffer.byteLength,
+          totalPoints,
+          totalLines,
+        );
 
-        if (!line.trim()) continue;
-
-        const [x, y] = line.split(',').map((v) => parseFloat(v.trim()));
-
-        if (!isNaN(x) && !isNaN(y)) {
-          dataPoints.push({ x, y });
-          totalPoints++;
-        }
-
-        if (dataPoints.length >= BATCH_SIZE) {
-          const pointsBatch = dataPoints.slice();
-
-          ctx.postMessage({
-            action: 'result',
-            points: pointsBatch,
-            count: pointsBatch.length,
-            currentTotal: totalPoints,
-          });
-
-          dataPoints = [];
-          reportProgress(
-            processedBytes,
-            fileBuffer.byteLength,
-            totalPoints,
-            totalLines,
-          );
-
-          // Yield between batches so the UI can apply progress updates.
-          await new Promise((resolve) => setTimeout(resolve, 0));
-        }
-      }
+        return yieldToMainThread().then(() => processChunk(chunkEnd));
+      });
     }
 
     reportProgress(
@@ -84,44 +152,10 @@ async function parseCSV(fileBuffer: ArrayBuffer) {
       totalLines,
     );
 
-    // Yield between chunk reads to keep parsing responsive on large files.
-    await new Promise((resolve) => setTimeout(resolve, 0));
-  }
+    return yieldToMainThread().then(() => processChunk(chunkEnd));
+  };
 
-  if (buffer.trim()) {
-    totalLines++;
-    const [x, y] = buffer
-      .trim()
-      .split(',')
-      .map((v) => parseFloat(v.trim()));
-    if (!isNaN(x) && !isNaN(y)) {
-      dataPoints.push({ x, y });
-      totalPoints++;
-    }
-  }
-
-  if (dataPoints.length > 0) {
-    ctx.postMessage({
-      action: 'result',
-      points: dataPoints.slice(),
-      count: dataPoints.length,
-      currentTotal: totalPoints,
-    });
-  }
-
-  ctx.postMessage({
-    action: 'complete',
-    totalPoints,
-    totalLines,
-    processedBytes: fileBuffer.byteLength,
-  });
-
-  reportProgress(
-    fileBuffer.byteLength,
-    fileBuffer.byteLength,
-    totalPoints,
-    totalLines,
-  );
+  return processChunk(0);
 }
 
 function reportProgress(

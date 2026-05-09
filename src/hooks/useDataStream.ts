@@ -1,9 +1,11 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
 import { DataPoint } from '@/types';
 
+type DataStreamStatus = 'idle' | 'processing';
+
 export function useDataStream() {
   const [data, setData] = useState<DataPoint[]>([]);
-  const [isLoading, setIsLoading] = useState(false);
+  const [status, setStatus] = useState<DataStreamStatus>('idle');
   const [progress, setProgress] = useState(0);
   const [error, setError] = useState<string | null>(null);
 
@@ -20,7 +22,7 @@ export function useDataStream() {
   }, []);
 
   const processFile = useCallback(async (file: File) => {
-    setIsLoading(true);
+    setStatus('processing');
     setError(null);
     setProgress(0);
     setData([]);
@@ -59,13 +61,13 @@ export function useDataStream() {
 
           pointsCollectionRef.current.sort((a, b) => a.x - b.x);
           setData([...pointsCollectionRef.current]);
-          setIsLoading(false);
+          setStatus('idle');
         }
       };
 
       workerRef.current.onerror = (e) => {
         setError(`Worker error: ${e.message}`);
-        setIsLoading(false);
+        setStatus('idle');
       };
 
       const arrayBuffer = await file.arrayBuffer();
@@ -76,9 +78,10 @@ export function useDataStream() {
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       setError(`Error processing file: ${message}`);
-      setIsLoading(false);
+      setStatus('idle');
     }
   }, []);
 
+  const isLoading = status === 'processing';
   return { data, isLoading, progress, error, processFile };
 }

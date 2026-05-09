@@ -15,6 +15,12 @@ interface UsePlotWindowProps {
   defaultDownsamplingThreshold?: number;
 }
 
+interface PlaybackState {
+  start: number;
+  windowSize: number;
+  isPlaying: boolean;
+}
+
 export function usePlotWindow({
   data,
   defaultWindowSize = DEFAULT_WINDOW_SIZE,
@@ -23,47 +29,53 @@ export function usePlotWindow({
   defaultDownsamplingThreshold = DEFAULT_DOWNSAMPLING_THRESHOLD,
 }: UsePlotWindowProps) {
   const dataLength = data.length;
-  const [start, setStart] = useState(0);
-  const [windowSize, setWindowSize] = useState(defaultWindowSize);
-  const [interval, setInterval] = useState(defaultInterval);
-  const [increment, setIncrement] = useState(defaultIncrement);
-  const [downsamplingThreshold, setDownsamplingThreshold] = useState(
+  const [playbackState, setPlaybackState] = useState<PlaybackState>({
+    start: 0,
+    windowSize: defaultWindowSize,
+    isPlaying: false,
+  });
+  const [interval, setIntervalState] = useState(defaultInterval);
+  const [increment, setIncrementState] = useState(defaultIncrement);
+  const [downsamplingThreshold, setDownsamplingThresholdState] = useState(
     defaultDownsamplingThreshold,
   );
-  const [isPlaying, setIsPlaying] = useState(false);
 
   const animationRef = useRef<number | null>(null);
   const lastUpdateTimeRef = useRef<number>(0);
-  const maxStart = Math.max(dataLength - windowSize, 0);
+  const maxStart = Math.max(dataLength - playbackState.windowSize, 0);
 
   const togglePlay = useCallback(() => {
-    setIsPlaying((prev) => !prev);
+    setPlaybackState((prev) => ({
+      ...prev,
+      isPlaying: !prev.isPlaying,
+    }));
   }, []);
 
   const animateFrame = useCallback(
     (timestamp: number) => {
       if (timestamp - lastUpdateTimeRef.current >= interval) {
-        setStart((prev) => {
-          const newStart = prev + increment;
-          if (newStart >= maxStart) {
-            setIsPlaying(false);
-            return maxStart;
-          }
-          return newStart;
+        setPlaybackState((prev) => {
+          const nextStart = Math.min(prev.start + increment, maxStart);
+
+          return {
+            ...prev,
+            start: nextStart,
+            isPlaying: nextStart < maxStart,
+          };
         });
 
         lastUpdateTimeRef.current = timestamp;
       }
 
-      if (isPlaying) {
+      if (playbackState.isPlaying) {
         animationRef.current = requestAnimationFrame(animateFrame);
       }
     },
-    [interval, increment, isPlaying, maxStart],
+    [increment, interval, maxStart, playbackState.isPlaying],
   );
 
   useEffect(() => {
-    if (isPlaying) {
+    if (playbackState.isPlaying) {
       lastUpdateTimeRef.current = performance.now();
       animationRef.current = requestAnimationFrame(animateFrame);
     } else if (animationRef.current) {
@@ -77,27 +89,26 @@ export function usePlotWindow({
         animationRef.current = null;
       }
     };
-  }, [isPlaying, animateFrame]);
+  }, [playbackState.isPlaying, animateFrame]);
 
   useEffect(() => {
-    setIsPlaying(false);
-    setStart(0);
-
-    if (dataLength > 0) {
-      setWindowSize(Math.min(defaultWindowSize, dataLength));
-    } else {
-      setWindowSize(defaultWindowSize);
-    }
+    setPlaybackState((prev) => ({
+      ...prev,
+      isPlaying: false,
+      start: 0,
+      windowSize:
+        dataLength > 0
+          ? Math.min(defaultWindowSize, dataLength)
+          : defaultWindowSize,
+    }));
   }, [dataLength, defaultWindowSize]);
 
   const handleStartChange = useCallback(
     (value: number) => {
-      if (dataLength === 0) {
-        setStart(0);
-        return;
-      }
-
-      setStart(Math.max(0, Math.min(value, maxStart)));
+      setPlaybackState((prev) => ({
+        ...prev,
+        start: dataLength === 0 ? 0 : Math.max(0, Math.min(value, maxStart)),
+      }));
     },
     [dataLength, maxStart],
   );
@@ -105,32 +116,48 @@ export function usePlotWindow({
   const handleWindowSizeChange = useCallback(
     (value: number) => {
       if (dataLength === 0) {
-        setWindowSize(defaultWindowSize);
-        setStart(0);
+        setPlaybackState((prev) => ({
+          ...prev,
+          start: 0,
+          windowSize: defaultWindowSize,
+        }));
         return;
       }
 
       const nextWindowSize = Math.max(1, Math.min(value, dataLength));
-      setWindowSize(nextWindowSize);
-      setStart((currentStart) =>
-        Math.min(currentStart, Math.max(dataLength - nextWindowSize, 0)),
-      );
+      setPlaybackState((prev) => ({
+        ...prev,
+        windowSize: nextWindowSize,
+        start: Math.min(prev.start, Math.max(dataLength - nextWindowSize, 0)),
+      }));
     },
     [dataLength, defaultWindowSize],
   );
 
+  const handleIntervalChange = useCallback((value: number) => {
+    setIntervalState(value);
+  }, []);
+
+  const handleIncrementChange = useCallback((value: number) => {
+    setIncrementState(value);
+  }, []);
+
+  const handleDownsamplingThresholdChange = useCallback((value: number) => {
+    setDownsamplingThresholdState(value);
+  }, []);
+
   return {
-    start,
+    start: playbackState.start,
     setStart: handleStartChange,
-    windowSize,
+    windowSize: playbackState.windowSize,
     setWindowSize: handleWindowSizeChange,
     interval,
-    setInterval,
+    setInterval: handleIntervalChange,
     increment,
-    setIncrement,
+    setIncrement: handleIncrementChange,
     downsamplingThreshold,
-    setDownsamplingThreshold,
-    isPlaying,
+    setDownsamplingThreshold: handleDownsamplingThresholdChange,
+    isPlaying: playbackState.isPlaying,
     togglePlay,
   };
 }
